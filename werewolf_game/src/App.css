@@ -1,0 +1,13 @@
+body {
+    margin: 0;
+    padding: 0;
+    background: radial-gradient(
+            ellipse at center,
+            #1a2238 0%,
+            #0d1225 40%,
+            #060712 100%
+    ) fixed;
+    color: #f1f1f1;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    min-height: 100vh;
+}

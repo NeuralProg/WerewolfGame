@@ -1,0 +1,58 @@
+.create-game {
+}
+
+.create-game-container {
+    min-height: 100vh;
+    padding: 4rem 1rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.role-cards-selection {
+    max-width: 1200px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 0.5rem ;
+    justify-content: center;
+}
+.game-stats-line {
+    max-width: 1200px;
+    margin: 3rem auto 1rem auto;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.game-stat {
+    min-height: 4rem;
+    padding: 0.5rem 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.game-stat-day-duration {
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.game-stat-nb-players {
+    font-size: 1.5rem;
+    font-weight: bold;
+    text-align: center;
+    margin: 0;
+}
+
+@media (max-width: 767px) {
+    .game-stat-nb-players {
+        font-size: 1.25rem;
+    }
+}
+
+.create-game-button {
+    margin-top: 4rem;
+}

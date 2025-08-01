@@ -1,0 +1,14 @@
+.secondary-button {
+
+}
+
+.secondary-button-component {
+    border-color: #e63946 !important;
+    color: #e63946 !important;
+    background-color: white !important;
+}
+
+.secondary-button-component:hover {
+    background-color: #e63946 !important;
+    color: white !important;
+}
