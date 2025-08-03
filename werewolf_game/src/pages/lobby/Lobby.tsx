@@ -10,7 +10,7 @@ type Player = {
 };
   
 function Lobby() {
-    const navigate = useNavigate(); nb
+    const navigate = useNavigate();
     const location = useLocation();
     const { roomId } = useParams<{ roomId: string }>();
 
