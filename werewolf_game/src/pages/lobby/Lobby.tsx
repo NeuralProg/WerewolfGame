@@ -1,77 +1,94 @@
 import './Lobby.css';
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { socket } from '../../shared/socket-server/socket';
 import { getOrCreateUserId } from '../../utils/ManageUserId';
+import { usePlayer } from '../../contexts/PlayerContext';
 
-type Player = {
-    id: string;
-    userName: string;
-};
-  
+type Player = { id: string; userName: string; userId: string };
+
 function Lobby() {
     const navigate = useNavigate();
     const location = useLocation();
-    const { roomId } = useParams<{ roomId: string }>();
+    const { userId, setUserId, username, setUsername, roomId, setRoomId, isHost, setIsHost } = usePlayer();
 
-    const [isHost, setIsHost] = useState<boolean>(() => {
-        if (location.state?.isHost !== undefined)
-            return location.state.isHost;
-        const stored = sessionStorage.getItem('isHost');
-        return stored === 'true';
-    });
-
-    const [username, setUsername] = useState<string>(() => {
-        if (location.state?.username)
-            return location.state.username;
-        const stored = sessionStorage.getItem('username');
-        return stored || '';
-    });
-
+    const { roomId: urlRoomId } = useParams<{ roomId: string }>();
     const [playerList, setPlayerList] = useState<Player[]>([]);
+    const hasJoinedRef = useRef(false);
 
+    // if URL changed, sync it to context (run once when urlRoomId changes)
     useEffect(() => {
-        if (!roomId) {
-            const storedRoomId = sessionStorage.getItem('roomId');
-            if (storedRoomId) {
-                navigate(`/lobby/${storedRoomId}`, { replace: true });
-                return;
-            }
-            alert('Invalid room code');
-            navigate('/');
-            return;
+        if (urlRoomId) setRoomId(urlRoomId);
+    }, [urlRoomId, setRoomId]);
+
+    // initialize context from location.state or sessionStorage and ensure userId exists
+    useEffect(() => {
+        // username
+        if (location.state?.username) {
+            setUsername(location.state.username);
+            sessionStorage.setItem('username', location.state.username);
+        } else {
+            const stored = sessionStorage.getItem('username');
+            if (stored) setUsername(stored);
         }
 
-        const userId = getOrCreateUserId();
-        socket.emit('join-session', {
-            code: roomId,
-            username,
-            userId,
-        });
+        // roomId (if not set from params)
+        if (!roomId) {
+            const storedRoom = sessionStorage.getItem('roomId');
+            if (storedRoom) {
+                setRoomId(storedRoom);
+            }
+        } else {
+            sessionStorage.setItem('roomId', roomId);
+        }
 
+        // isHost
+        if (location.state?.isHost !== undefined) {
+            setIsHost(location.state.isHost);
+            sessionStorage.setItem('isHost', String(location.state.isHost));
+        } else {
+            const stored = sessionStorage.getItem('isHost');
+            if (stored) setIsHost(stored === 'true');
+        }
+
+        // ensure userId exists
+        if (!userId) {
+            const uid = getOrCreateUserId();
+            setUserId(uid);
+            sessionStorage.setItem('userId', uid);
+        }
+    }, [location.state, roomId, setRoomId, setUsername, setIsHost, setUserId, userId]);
+
+    // socket listeners
+    useEffect(() => {
         const onError = (msg: string) => {
             alert(msg);
             navigate('/');
         };
+        const onPlayerList = (list: Player[]) => setPlayerList(list);
+        const onStart = () => navigate(`/role/${roomId}`);
+
         socket.on('error-message', onError);
-
-        const onPlayerList = (list: Player[]) => {
-            setPlayerList(list);
-        };
         socket.on('player-list', onPlayerList);
-
-        const handleStartGame = () => {
-            navigate(`/role/${roomId}`);
-        };
-        socket.on('start-game', handleStartGame);
+        socket.on('start-game', onStart);
 
         return () => {
             socket.off('error-message', onError);
             socket.off('player-list', onPlayerList);
+            socket.off('start-game', onStart);
         };
-    }, [roomId, navigate, username]);
+    }, [navigate, roomId]);
 
-    console.log(sessionStorage, playerList);
+    // emit join-session only once, when roomId & username & userId are available
+    useEffect(() => {
+        if (hasJoinedRef.current) return;
+        if (!roomId) return;
+        if (!username) return;
+        if (!userId) return;
+
+        socket.emit('join-session', { code: roomId, username: username, userId: userId });
+        hasJoinedRef.current = true;
+    }, [roomId, username, userId]);
 
     function startGame() {
         socket.emit('start-game', roomId);
@@ -80,20 +97,16 @@ function Lobby() {
     return (
         <div className="lobby">
             <h1>{isHost ? 'Host Lobby' : 'Lobby'}</h1>
-            <p>
-                Share this code: <strong>{roomId}</strong>
-            </p>
+            <p>Share this code: <strong>{roomId}</strong></p>
+
             <p>Player list:</p>
             <ul>
-                {playerList.map((player) => (
-                    <li key={player.id}>{player.userName}</li>
+                {playerList.map(p => (
+                    <li key={p.userId || p.id}>{p.userName || '...'}</li>
                 ))}
             </ul>
 
-            <h4>Settings of the game and rules (cards, nb player, vote time, stats)</h4>
-            <h4>Players display (list)</h4>
             {isHost && <button onClick={startGame}>Start Game</button>}
-            <h4>Rules</h4>
         </div>
     );
 }

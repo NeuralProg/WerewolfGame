@@ -5,52 +5,54 @@ import { useNavigate } from 'react-router-dom';
 import { socket } from '../../shared/socket-server/socket';
 import { getOrCreateUserId } from '../../utils/ManageUserId';
 
-import { MIN_PLAYERS, MAX_PLAYERS, ROLES, ROLES_MAX, DAY_TIME_RANGE, DEFAULT_DAY_TIME } from "../../config/GameConfig.ts";
+import { MIN_PLAYERS, MAX_PLAYERS, ROLES, ROLES_MAX, DAY_TIME_RANGE, DEFAULT_DAY_TIME } from "../../config/GameConfig";
 import SecondaryButton from '../../shared/secondary-button/SecondaryButton';
 import RoleCard from './components/role-card/RoleCard';
 import DayTimeSlider from './components/day-time-slider/DayTimeSlider';
 
+import { usePlayer } from '../../contexts/PlayerContext';
+
 function CreateGame() {
     const navigate = useNavigate();
-    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const { setUserId, setUsername, setRoomId, setIsHost } = usePlayer();
 
-    const [activeRoles, setActiveRoles] = useState<number[]>(() =>
-        Array(ROLES.length).fill(0)
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [activeRoles, setActiveRoles] = useState<number[]>(
+        () => Array(ROLES.length).fill(0)
     );
-    const nbOfPlayers = activeRoles.reduce((acc, value) => acc + value, 0);
+    const nbOfPlayers = activeRoles.reduce((acc, v) => acc + v, 0);
 
     const [dayTime, setDayTime] = useState(DEFAULT_DAY_TIME);
-    const [username, setUsername] = useState('');
-
-    const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setUsername(e.target.value);
-    };
+    const [usernameLocal, setUsernameLocal] = useState('');
 
     useEffect(() => {
-        socket.on('session-created', (generatedCode: string) => {
+        const onSessionCreated = (generatedCode: string) => {
+            // Set context + sessionStorage so Lobby can rehydrate
+            setRoomId(generatedCode);
+            setIsHost(true);
+            setUsername(usernameLocal);
+            const uid = getOrCreateUserId();
+            setUserId(uid);
             sessionStorage.setItem('roomId', generatedCode);
+            sessionStorage.setItem('username', usernameLocal);
             sessionStorage.setItem('isHost', 'true');
-            sessionStorage.setItem('username', username);
+            sessionStorage.setItem('userId', uid);
 
-            navigate(`/lobby/${generatedCode}`, { state: { isHost: true, username } });
-        });
-
-        return () => {
-            socket.off('session-created');
+            navigate(`/lobby/${generatedCode}`, { state: { isHost: true, username: usernameLocal } });
         };
-    }, [navigate, username]);
+        socket.on('session-created', onSessionCreated);
+        return () => { socket.off('session-created', onSessionCreated); };
+    }, [navigate, setRoomId, setIsHost, setUsername, setUserId, usernameLocal]);
 
     function editRoleCount(idx: number, delta: number) {
-        setActiveRoles((prev) => {
+        setActiveRoles(prev => {
             const copy = [...prev];
             if (
                 (delta < 0 && copy[idx] <= 0) ||
                 (delta > 0 && copy[idx] >= ROLES_MAX[idx]) ||
-                idx < 0 ||
-                idx >= ROLES.length ||
+                idx < 0 || idx >= ROLES.length ||
                 nbOfPlayers + delta > MAX_PLAYERS
-            )
-                return copy;
+            ) return copy;
             copy[idx] += delta;
             return copy;
         });
@@ -58,30 +60,44 @@ function CreateGame() {
 
     function createOnlineSession() {
         if (nbOfPlayers < MIN_PLAYERS || nbOfPlayers > MAX_PLAYERS) {
-            setErrorMessage(
-                `Number of players should be between ${MIN_PLAYERS} and ${MAX_PLAYERS}!`
-            );
+            setErrorMessage(`Number of players should be between ${MIN_PLAYERS} and ${MAX_PLAYERS}!`);
             return;
         }
         if (activeRoles[0] <= 0) {
             setErrorMessage('There is no werewolf in the game!');
             return;
         }
-        if (username.length <= 0 || username.length > 15) {
+        if (usernameLocal.length <= 0 || usernameLocal.length > 15) {
             setErrorMessage('Username must be between 1 and 15 characters!');
             return;
         }
 
         setErrorMessage(null);
-        const userId = getOrCreateUserId();
+
+        const uid = getOrCreateUserId();
+        setUserId(uid);
+        setUsername(usernameLocal);
+        setIsHost(true);
+        sessionStorage.setItem('userId', uid);
+        sessionStorage.setItem('username', usernameLocal);
+        sessionStorage.setItem('isHost', 'true');
+
+        const strGameRolesList: string[] = [];
+        for (let i = 0; i < ROLES.length; i++) {
+            for (let x = 0; x < activeRoles[i]; x++) {
+                strGameRolesList.push(ROLES[i]);
+            }
+        }
 
         socket.emit('create-session', {
-            username,
+            username: usernameLocal,
             nbOfPlayers,
-            roles: activeRoles,
+            roles: strGameRolesList,
             dayTime,
-            userId,
+            userId: uid
         });
+        console.log('Creating online session with roles:', strGameRolesList);
+        // server will emit 'session-created' which we handle above
     }
 
     return (
@@ -103,18 +119,10 @@ function CreateGame() {
 
                 <Row className="game-stats-line gx-3 gy-2">
                     <Col xs={12} md={4} className="game-stat game-stat-day-duration">
-                        <DayTimeSlider
-                            dayTimeRange={DAY_TIME_RANGE}
-                            dayTime={dayTime}
-                            setDayTime={setDayTime}
-                        />
+                        <DayTimeSlider dayTimeRange={DAY_TIME_RANGE} dayTime={dayTime} setDayTime={setDayTime} />
                     </Col>
 
-                    <Col
-                        xs={12}
-                        md={4}
-                        className="game-stat text-center d-flex align-items-center justify-content-center"
-                    >
+                    <Col xs={12} md={4} className="game-stat text-center d-flex align-items-center justify-content-center">
                         <p className="game-stat-nb-players mb-0">{nbOfPlayers} Players</p>
                     </Col>
 
@@ -124,20 +132,15 @@ function CreateGame() {
                             type="text"
                             placeholder="Username"
                             aria-label="Username text area"
-                            value={username}
-                            onChange={handleUsernameChange}
+                            value={usernameLocal}
+                            onChange={(e) => setUsernameLocal(e.target.value)}
                             maxLength={15}
                         />
                     </Col>
                 </Row>
 
                 {errorMessage && (
-                    <Alert
-                        className="py-2 px-3 mt-5 mb-0"
-                        variant="info"
-                        dismissible
-                        onClose={() => setErrorMessage(null)}
-                    >
+                    <Alert className="py-2 px-3 mt-5 mb-0" variant="info" dismissible onClose={() => setErrorMessage(null)}>
                         <p>{errorMessage}</p>
                     </Alert>
                 )}

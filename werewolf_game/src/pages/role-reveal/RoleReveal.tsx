@@ -1,8 +1,8 @@
 import './RoleReveal.css'
-
-
+import { socket } from '../../shared/socket-server/socket';
 
 function RoleReveal() {
+    //socket.emit("get-role", ...
     return (
         <div className="RoleReveal">
             <h1>RoleReveal</h1>
